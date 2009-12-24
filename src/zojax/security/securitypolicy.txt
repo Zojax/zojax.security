@@ -1,0 +1,149 @@
+=============================
+Extended Zope Security Policy
+=============================
+
+This package implements a extended version of zope.securitypolicy.
+Main difference:
+
+  - for permissions to roles mapping we use IRolePermissionManager interface
+
+  - for roles to permissions mapping we try find all IPrincipalRoleMap 
+    adapters, including named adapters, extended security policy 
+    allow dynmiclly calculate roles for principal
+
+Everything else is standard zope3 implementation. For standard security policy
+documentation check zope/securitypolicy/zopepolicy.txt file.
+Most of this code from zopepolicy.txt file because in general this security
+policy only extended version of standard version.
+
+
+   >>> import zope.interface
+   >>> from zope.annotation.interfaces import IAttributeAnnotatable
+
+   >>> class IMyObject(zope.interface.Interface):
+   ...   pass
+
+   >>> class Ob:
+   ...    __parent__ = None
+   ...    zope.interface.implements(IAttributeAnnotatable, IMyObject)
+
+   >>> ob = Ob()
+
+   >>> class Principal:
+   ...     def __init__(self, id):
+   ...         self.id = id
+   ...         self.groups = []
+
+   >>> principal = Principal('bob')
+
+   >>> class Participation:
+   ...     interaction = None
+
+   >>> from zojax.security.securitypolicy import SecurityPolicy
+
+   >>> import zope.security.management
+   >>> oldpolicy = zope.security.management.setSecurityPolicy(SecurityPolicy)
+
+Let's create interaction:
+
+   >>> participation = Participation()
+   >>> participation.principal = principal
+   >>> zope.security.management.endInteraction()
+   >>> zope.security.management.newInteraction(participation)
+   >>> interaction = zope.security.management.getInteraction()
+
+   >>> interaction.checkPermission('P1', ob)
+   False
+
+Let's work with roles
+
+   >>> from zope.securitypolicy import interfaces
+
+   >>> interaction.checkPermission('P1', ob)
+   False
+
+We will use 'content.Owner' role, we need give permission to role:
+
+   >>> roleper  = interfaces.IRolePermissionManager(ob)
+   >>> roleper.grantPermissionToRole('P1', 'content.Owner')
+   
+Right now 'bob' principal doesn't have 'content.Owner' role on 'ob' object 
+with standard policy we should use IPrincipalRoleManager adapter to
+give ''content.Owner' role to principal. With extended version we can define
+named adapter. Here example that implemen owner roles that doesn't 
+depends on object annotations:
+
+Let's use 'ob' object attribute to define owner of object:
+
+   >>> ob.owner = 'bob'
+
+Now we need custom IPrincipalRoleMap:
+
+   >>> from zope.app.security.settings import Allow, Deny
+
+   >>> class OwnerRolesMap(object):
+   ...   zope.interface.implements(interfaces.IPrincipalRoleMap)
+   ...
+   ...   def __init__(self, context):
+   ...      self.context = context
+   ...
+   ...   def getRolesForPrincipal(self, principal_id):
+   ...      if getattr(self.context, 'owner', '') == principal_id:
+   ...         return (('content.Owner', Allow),)
+   ...      return (('content.Owner', Deny),)
+
+For testing implemented only getRolesForPrincipal method, but in many cases we 
+need implement all methods.
+
+Now we need register named adapter 
+
+   >>> from zope.component import provideAdapter
+   >>> provideAdapter(OwnerRolesMap, (IMyObject,), \
+   ...      interfaces.IPrincipalRoleMap, name='ownership')
+   >>> interaction.invalidate_cache()
+
+So 'bob' principal should get 'content.Owner' role on 'ob'
+
+   >>> interaction.checkPermission('P1', ob)
+   True
+
+For better 'Ownership' implementation check zojax.ownership package. 
+
+For futher testing remove permission from role:
+
+   >>> roleper.unsetPermissionFromRole('P1', 'content.Owner')
+
+   >>> interaction.checkPermission('P1', ob)
+   False
+
+With extended security policy we can supply custom IRolePermissionManager 
+implementation for object:
+
+   >>> class RolePermissionMap(object):
+   ...   zope.interface.implements(interfaces.IRolePermissionMap)
+   ...
+   ...   def __init__(self, context):
+   ...      self.context = context
+   ...   
+   ...   def getRolesForPermission(self, permission_id):
+   ...     if permission_id == 'P2':
+   ...        return (('content.Owner', Allow), ('content.Owner1', Deny))
+   ...     elif permission_id == 'P3':
+   ...        return (('content.Owner1', Allow), ('content.Owner', Deny))
+   ...     return ()
+
+   >>> provideAdapter(RolePermissionMap, (IMyObject,), \
+   ...      interfaces.IRolePermissionMap, name='custom')
+   >>> interaction.invalidate_cache()
+
+   >>> interaction.checkPermission('P2', ob)
+   True
+
+   >>> interaction.checkPermission('P3', ob)
+   False
+
+   >>> prinrole = interfaces.IPrincipalRoleManager(ob)
+   >>> prinrole.assignRoleToPrincipal('content.Owner1', 'bob')
+
+   >>> interaction.checkPermission('P3', ob)
+   True

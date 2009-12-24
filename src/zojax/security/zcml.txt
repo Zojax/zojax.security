@@ -1,0 +1,87 @@
+====================
+zojax:role directive
+====================
+
+PublicRole - это роль которая доступна для UI
+
+   >>> from zope import component
+
+   >>> sm = component.getSiteManager()
+
+Let's create role
+
+   >>> from zope.securitypolicy.role import Role
+   >>> from zope.securitypolicy.interfaces import IRole
+
+   >>> role = Role('zope.Member', 'Member')
+   >>> sm.registerUtility(role, name='zope.Member')
+
+   >>> manager = Role('zope.Manager', 'Manager')
+   >>> sm.registerUtility(manager, name='zope.Manager')
+
+Now load zcml directive and set portal.Member as public role
+
+   >>> from zope.configuration import xmlconfig
+   >>> context = xmlconfig.string("""
+   ... <configure xmlns:zojax="http://namespaces.zope.org/zojax">
+   ...    <include package="zojax.security" file="meta.zcml" />
+   ... 
+   ...    <zojax:role role="zope.Member" />
+   ...    <zojax:role role="zope.Manager" manager="true" />
+   ... </configure>""")
+
+   >>> from zojax.security.interfaces import IPublicRole, IManagerRole
+
+   >>> prole = sm.getUtility(IPublicRole, name='zope.Member')
+   >>> prole.id == 'zope.Member'
+   True
+   >>> IPublicRole.providedBy(prole)
+   True
+   >>> role is prole
+   True
+
+   >>> prole = sm.getUtility(IPublicRole, name='zope.Manager')
+   >>> IManagerRole.providedBy(prole)
+   True
+   >>> manager is prole
+   True
+
+
+==========================
+zojax:permission directive
+==========================
+
+Let's create permission
+
+   >>> from zope.security.permission import Permission
+   >>> from zope.security.interfaces import IPermission
+
+   >>> permission = Permission('portal.Permission', 'Permission')
+   >>> sm.registerUtility(permission, name='portal.Permission')
+
+Now load zcml directive and set portal.Member as public pemrission
+
+   >>> context = xmlconfig.string("""
+   ... <configure xmlns:zojax="http://namespaces.zope.org/zojax">
+   ...    <zojax:permission permission="zope.Public" />
+   ... </configure>""", context)
+   Traceback (most recent call last):
+   ...
+   ZopeXMLConfigurationError:...
+
+   >>> context = xmlconfig.string("""
+   ... <configure xmlns:zojax="http://namespaces.zope.org/zojax">
+   ...    <zojax:permission
+   ...         permission="portal.Permission"
+   ...         category="zojax.security.interfaces.IPermissionCategory" />
+   ... </configure>""", context)
+
+   >>> from zojax.security.interfaces import IPublicPermission
+
+   >>> p = sm.getUtility(IPublicPermission, name='portal.Permission')
+   >>> p.id == 'portal.Permission'
+   True
+   >>> IPublicPermission.providedBy(p)
+   True
+   >>> permission is p
+   True

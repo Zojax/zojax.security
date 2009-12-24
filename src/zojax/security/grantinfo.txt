@@ -1,0 +1,181 @@
+==================
+IExtendedGrantInfo
+==================
+
+IExtendedGrantInfo interface is extended version of IGrantInfo
+from zope/securitypolicy but it runs for each parent and
+uses all available IRolePermissionMap and IPrincipalRoleMap adapters
+for object.
+
+initialization:
+
+   >>> from zope import interface
+   >>> from zope.component import provideAdapter
+   >>> from zope.securitypolicy import interfaces
+   >>> from zojax.security.grantinfo import ExtendedGrantInfo
+   >>> from zojax.security.interfaces import IExtendedGrantInfo
+
+   >>> provideAdapter(ExtendedGrantInfo, (interface.Interface,), IExtendedGrantInfo)
+
+   >>> import zope.interface
+   >>> from zope.annotation.interfaces import IAttributeAnnotatable
+
+   >>> class IMyObject(zope.interface.Interface):
+   ...   pass
+
+   >>> class Ob:
+   ...     __name__ = u''
+   ...     __parent__ = None
+   ...     zope.interface.implements(IAttributeAnnotatable, IMyObject)
+   ...     
+   ...     def __init__(self, name):
+   ...         self.__name__ = name
+   ...     def __repr__(self):
+   ...         return '<Ob "%s">'%self.__name__
+
+   >>> ob1 = Ob('ob1')
+   >>> ob2 = Ob('ob2')
+   >>> ob3 = Ob('ob3')
+   >>> ob4 = Ob('ob4')
+
+Let's build parents dependencies: ob1->ob2->ob3, ob1->ob4
+
+   >>> ob2.__parent__ = ob1
+   >>> ob3.__parent__ = ob2
+   >>> ob4.__parent__ = ob1
+
+   >>> grantinfo = IExtendedGrantInfo(ob3)
+   >>> IExtendedGrantInfo.providedBy(grantinfo)
+   True
+
+   >>> grantinfo.getRolesForPermission('P1')
+   []
+
+
+getRolesForPermission
+---------------------
+
+This is standard behaviour:
+
+   >>> roleper  = interfaces.IRolePermissionManager(ob3)
+   >>> roleper.grantPermissionToRole('P1', 'role1')
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role1', PermissionSetting: Allow)]
+
+Now let's set permission in parent:
+
+   >>> roleper  = interfaces.IRolePermissionManager(ob2)
+   >>> roleper.grantPermissionToRole('P1', 'role2')
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role1', PermissionSetting: Allow), ('role2', PermissionSetting: Allow)]
+
+   >>> roleper  = interfaces.IRolePermissionManager(ob1)
+   >>> roleper.grantPermissionToRole('P1', 'role3')
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role1', PermissionSetting: Allow), ('role3', PermissionSetting: Allow), ('role2', PermissionSetting: Allow)]
+
+   >>> roleper.denyPermissionToRole('P1', 'role3')
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role1', PermissionSetting: Allow), ('role3', PermissionSetting: Deny), ('role2', PermissionSetting: Allow)]
+
+But lower object permissions/role has more weight, now we 
+have role3 denied for P1 permission on ob1, we can allow permission 
+on ob2 so ob3 should have allow for P1 permission on role role3
+
+   >>> roleper  = interfaces.IRolePermissionManager(ob2)
+   >>> roleper.grantPermissionToRole('P1', 'role3')
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role1', PermissionSetting: Allow), ('role3', PermissionSetting: Allow), ('role2', PermissionSetting: Allow)]
+
+   >>> grantinfo = IExtendedGrantInfo(ob4)
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role3', PermissionSetting: Deny)]
+
+global RolesForPermission
+
+   >>> from zope.securitypolicy.rolepermission import rolePermissionManager
+   >>> rolePermissionManager.grantPermissionToRole('P1', 'role4', False)
+
+   >>> grantinfo.getRolesForPermission('P1')
+   [('role4', PermissionSetting: Allow), ('role3', PermissionSetting: Deny)]
+
+
+getRolesForPrincipal
+--------------------
+
+   >>> from zope.securitypolicy.principalrole import principalRoleManager
+   >>> principalRoleManager.assignRoleToPrincipal('role10', 'bob', False)
+
+   >>> grantinfo = IExtendedGrantInfo(ob3)
+   >>> grantinfo.getRolesForPrincipal('bob')
+   [('role10', PermissionSetting: Allow)]
+
+   >>> prinrole  = interfaces.IPrincipalRoleManager(ob3)
+   >>> prinrole.assignRoleToPrincipal('role1', 'bob')
+
+   >>> grantinfo.getRolesForPrincipal('bob')
+   [('role1', PermissionSetting: Allow), ('role10', PermissionSetting: Allow)]
+
+   >>> prinrole  = interfaces.IPrincipalRoleManager(ob2)
+   >>> prinrole.assignRoleToPrincipal('role2', 'bob')
+
+   >>> grantinfo.getRolesForPrincipal('bob')
+   [('role1', PermissionSetting: Allow), ('role10', PermissionSetting: Allow), ('role2', PermissionSetting: Allow)]
+
+   >>> prinrole  = interfaces.IPrincipalRoleManager(ob1)
+   >>> prinrole.assignRoleToPrincipal('role3', 'bob')
+
+   >>> grantinfo.getRolesForPrincipal('bob')
+   [('role1', PermissionSetting: Allow), ('role10', PermissionSetting: Allow), ('role3', PermissionSetting: Allow), ('role2', PermissionSetting: Allow)]
+
+role3 role allowed for principal 'bob' on ob1, we can deny this role on object ob2
+and on ob3 role3 should be denied
+
+   >>> prinrole  = interfaces.IPrincipalRoleManager(ob2)
+   >>> prinrole.removeRoleFromPrincipal('role3', 'bob')
+
+   >>> grantinfo.getRolesForPrincipal('bob')
+   [('role1', PermissionSetting: Allow), ('role10', PermissionSetting: Allow), ('role3', PermissionSetting: Deny), ('role2', PermissionSetting: Allow)]
+
+
+getPrincipalsForRole
+--------------------
+
+   >>> principalRoleManager.assignRoleToPrincipal('role1', 'bob2', False)
+
+This is new method in extended version, it usefull when we need get all
+principals that have role, for example for cataloging.
+
+   >>> grantinfo = IExtendedGrantInfo(ob3)
+   >>> grantinfo.getPrincipalsForRole('role1')
+   [('bob', PermissionSetting: Allow), ('bob2', PermissionSetting: Allow)]
+
+We can get info about other principals with same role
+
+   >>> prinrole  = interfaces.IPrincipalRoleManager(ob1)
+   >>> prinrole.assignRoleToPrincipal('role1', 'bob1')
+
+   >>> grantinfo.getPrincipalsForRole('role1')
+   [('bob', PermissionSetting: Allow), ('bob2', PermissionSetting: Allow), ('bob1', PermissionSetting: Allow)]
+
+
+getPrincipalsForPermission
+--------------------------
+
+   >>> from zope.securitypolicy.interfaces import IPrincipalPermissionManager
+   >>> from zope.securitypolicy.principalpermission import principalPermissionManager
+
+   >>> principalPermissionManager.grantPermissionToPrincipal('perm1', 'user1', False)
+
+   >>> grantinfo = IExtendedGrantInfo(ob3)
+   >>> grantinfo.getPrincipalsForPermission('perm1')
+   [('user1', PermissionSetting: Allow)]
+
+   >>> IPrincipalPermissionManager(ob2).denyPermissionToPrincipal('perm1', 'user1')
+   >>> grantinfo.getPrincipalsForPermission('perm1')
+   [('user1', PermissionSetting: Deny)]
