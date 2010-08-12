@@ -51,7 +51,7 @@ class CacheEntry(object):
 class SecurityPolicy(ZopeSecurityPolicy):
     interface.implements(IZojaxSecurityPolicy)
 
-    def getHash(ob):
+    def getHash(self, ob):
         res = hash(ob)
         while abs(res) > 0xFFFFFFFF:
             res = int(res/0xFFFFFFFF)
