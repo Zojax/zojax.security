@@ -51,14 +51,22 @@ class CacheEntry(object):
 class SecurityPolicy(ZopeSecurityPolicy):
     interface.implements(IZojaxSecurityPolicy)
 
+    def getHash(ob):
+        res = hash(ob)
+        while abs(res) > 0xFFFFFFFF:
+            res = int(res/0xFFFFFFFF)
+        return res
+
+
     def cache(self, parent):
+        hs = self.getHash(parent)
         cache = self._cache
 
-        if parent in cache:
-            return cache[parent]
+        if hs in cache:
+            return cache[hs]
         else:
             cacheEntry = CacheEntry()
-            cache[parent] = cacheEntry
+            cache[hs] = cacheEntry
             return cacheEntry
 
     def cached_roles(self, parent, permission, _allow=Allow):
@@ -95,7 +103,7 @@ class SecurityPolicy(ZopeSecurityPolicy):
         cache_roles[permission] = roles
         return roles
 
-    def cached_principal_roles(self, parent, principal, 
+    def cached_principal_roles(self, parent, principal,
                                SettingAsBoolean=SettingAsBoolean):
         cache = self.cache(parent)
         cache_principal_roles = cache.principal_roles
@@ -140,7 +148,7 @@ class SecurityPolicy(ZopeSecurityPolicy):
             cache_prin_per = cache_prin[principal]
         else:
             cache_prin_per = cache_prin[principal] = {}
-        
+
         if permission in cache_prin_per:
             return cache_prin_per[permission]
 
