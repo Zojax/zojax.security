@@ -66,6 +66,10 @@ setup(name='zojax.security',
       extras_require = dict(test=['zope.app.testing',
                                   'zope.testing',
                                   ]),
+      entry_points = """
+      [zodbupdate]
+      renames = zojax.security:rename_dict
+      """,
       include_package_data = True,
       zip_safe = False
       )
