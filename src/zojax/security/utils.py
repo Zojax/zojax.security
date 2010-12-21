@@ -19,8 +19,9 @@ from zope.component import getUtility
 from zope.security.proxy import removeSecurityProxy
 from zope.security.management import queryInteraction
 from zope.app.security.interfaces import IAuthentication, PrincipalLookupError
+from zope.app.security.principalregistry import Principal
 
-from interfaces import IZojaxSecurityPolicy
+from interfaces import IZojaxSecurityPolicy, _
 
 
 def getPrincipal(id=None):
@@ -36,7 +37,8 @@ def getPrincipal(id=None):
         try:
             return getUtility(IAuthentication).getPrincipal(id)
         except PrincipalLookupError:
-            return None
+            return Principal('unknown', _('Unknown'), _('Unknown'), 'unknown', 'unknown')
+
 
 
 def getPrincipals(ids):

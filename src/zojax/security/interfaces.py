@@ -16,6 +16,9 @@
 $Id$
 """
 from zope import interface
+from zope.i18nmessageid import MessageFactory
+
+_ = MessageFactory('zojax.security')
 
 
 class IZojaxSecurityPolicy(interface.Interface):
