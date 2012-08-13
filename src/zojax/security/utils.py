@@ -62,3 +62,7 @@ def checkPermissionForPrincipal(principal, permission, object):
             interaction._groupsFor(principal), permission)
 
     return False
+
+
+def invalidateSecurityCache():
+    queryInteraction().invalidate_cache()
