@@ -53,13 +53,15 @@ class RolesVocabulary(object):
     >>> for term in factory(None):
     ...     print term.value, term.title
     portal.Member Portal member
-    
+
     """
     interface.implements(IVocabularyFactory)
 
     def __call__(self, context, **kw):
         roles = []
         for name, role in getUtilitiesFor(IPublicRole):
+            if role.title != 'Site Manager' and not role.id:
+                continue
             term = SimpleTerm(role.id, role.id, role.title)
             term.description = getattr(role, 'description', u'')
             roles.append((role.title, term))
@@ -87,7 +89,7 @@ class PermissionsVocabulary(object):
     >>> for term in factory(None):
     ...     print term.value, term.title
     permission1 Permission1
-    
+
     """
     interface.implements(IVocabularyFactory)
 
